@@ -187,6 +187,27 @@ The `price_drift` failure is the other silent one: the agent omitted the
 `GROUP BY` and returned the same product once per order line until it hit the
 50-row cap.
 
+## Evaluated from the outside
+
+[agent-evals](https://github.com/Nachodusan/agent-evals) runs this agent's own
+golden set three times per case and checks the trajectory, not just the answer.
+It found two bugs this harness could not:
+
+- **The agent reported SQL it never executed.** Asked how many orders there
+  were, it read the count off `list_tables` and typed a `SELECT COUNT(*)` into
+  its final answer. The outcome grader scored it correct, on fabricated
+  evidence. `final_sql` now only ever holds SQL that actually ran; what the
+  model claimed is kept separately as `claimed_sql`.
+- **Malformed tool arguments crashed the run.** Llama-3.1-8B sends `arguments`
+  as a JSON array where the schema asks for an object; the parsed list reached
+  `.get()` and the whole attempt died. Six of its twenty-four attempts were
+  crashes scored as model failures. They now come back as a tool error the
+  model can correct.
+
+That evaluation also disagrees with the number below: three runs per case put
+this agent at **4/8 strict**, not 6/8. One of the passing cases was a coin
+flip.
+
 ## Running it
 
 Python ≥ 3.11 and any OpenAI-compatible endpoint.
