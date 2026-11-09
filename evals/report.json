@@ -1,0 +1,202 @@
+{
+  "summary": {
+    "passed": 6,
+    "total": 8,
+    "accuracy": 0.75,
+    "recovery_rate": 0.0,
+    "avg_steps": 8.8,
+    "total_cost_usd": 0.0136
+  },
+  "cases": [
+    {
+      "id": "count_orders",
+      "question": "How many orders are in the database?",
+      "traps": [],
+      "passed": true,
+      "reason": null,
+      "steps": 4,
+      "tool_path": [
+        "list_tables",
+        "finish"
+      ],
+      "recoveries": 0,
+      "latency_ms": 20565,
+      "cost_usd": 0.000506,
+      "stopped_reason": "finished",
+      "agent_sql": "SELECT COUNT(*) FROM orders;",
+      "expected_rows": 1
+    },
+    {
+      "id": "top_customers_net",
+      "question": "Who are the top 5 customers by how much they actually spent? Exclude cancelled orders and subtract any refunds.\n",
+      "traps": [
+        "no_total_column",
+        "cents",
+        "cancelled_orders",
+        "refunds"
+      ],
+      "passed": false,
+      "reason": "result mismatch",
+      "steps": 11,
+      "tool_path": [
+        "list_tables",
+        "describe_table",
+        "describe_table",
+        "describe_table",
+        "describe_table",
+        "run_sql",
+        "finish"
+      ],
+      "recoveries": 0,
+      "latency_ms": 66125,
+      "cost_usd": 0.002202,
+      "stopped_reason": "finished",
+      "agent_sql": "SELECT c.id, c.name, SUM(oi.quantity * oi.unit_price_cents) / 100.0 AS total_spent FROM customers c JOIN orders o ON c.id = o.customer_id JOIN order_items oi ON o.id = oi.order_id LEFT JOIN refunds r ON o.id = r.order_id WHERE o.status != 'cancelled' GROUP BY c.id ORDER BY total_spent DESC LIMIT 5",
+      "expected_rows": 5
+    },
+    {
+      "id": "revenue_by_category",
+      "question": "What is the total revenue per product category, excluding cancelled orders?",
+      "traps": [
+        "no_total_column",
+        "cents",
+        "cancelled_orders",
+        "join_through_items"
+      ],
+      "passed": true,
+      "reason": null,
+      "steps": 10,
+      "tool_path": [
+        "list_tables",
+        "describe_table",
+        "describe_table",
+        "describe_table",
+        "run_sql",
+        "finish"
+      ],
+      "recoveries": 0,
+      "latency_ms": 41745,
+      "cost_usd": 0.001899,
+      "stopped_reason": "finished",
+      "agent_sql": "SELECT p.category, SUM(oi.quantity * oi.unit_price_cents) / 100.0 AS total_revenue FROM order_items oi JOIN products p ON oi.product_id = p.id JOIN orders o ON oi.order_id = o.id WHERE o.status != 'cancelled' GROUP BY p.category",
+      "expected_rows": 5
+    },
+    {
+      "id": "avg_order_value",
+      "question": "What is the average order value for completed orders?",
+      "traps": [
+        "no_total_column",
+        "cents",
+        "status_filter"
+      ],
+      "passed": true,
+      "reason": null,
+      "steps": 10,
+      "tool_path": [
+        "list_tables",
+        "describe_table",
+        "describe_table",
+        "run_sql",
+        "finish"
+      ],
+      "recoveries": 0,
+      "latency_ms": 52399,
+      "cost_usd": 0.001971,
+      "stopped_reason": "finished",
+      "agent_sql": "SELECT AVG(total_amount_cents) / 100.0 AS avg_order_value FROM (SELECT o.id, SUM(oi.quantity * oi.unit_price_cents) AS total_amount_cents FROM orders o JOIN order_items oi ON o.id = oi.order_id WHERE o.status = 'completed' GROUP BY o.id)",
+      "expected_rows": 1
+    },
+    {
+      "id": "price_drift",
+      "question": "Which products were sold for less than their current list price, and what is the largest gap?\n",
+      "traps": [
+        "historic_vs_list_price"
+      ],
+      "passed": false,
+      "reason": "result mismatch",
+      "steps": 9,
+      "tool_path": [
+        "list_tables",
+        "describe_table",
+        "describe_table",
+        "run_sql",
+        "finish"
+      ],
+      "recoveries": 0,
+      "latency_ms": 24664,
+      "cost_usd": 0.0022,
+      "stopped_reason": "finished",
+      "agent_sql": "SELECT p.name, p.list_price_cents / 100.0 AS list_price, oi.unit_price_cents / 100.0 AS sold_price, (p.list_price_cents - oi.unit_price_cents) / 100.0 AS gap FROM products p JOIN order_items oi ON p.id = oi.product_id WHERE oi.unit_price_cents < p.list_price_cents ORDER BY gap DESC LIMIT 50",
+      "expected_rows": 15
+    },
+    {
+      "id": "orders_by_channel_q1",
+      "question": "How many orders came through each channel in the first quarter of 2026?",
+      "traps": [
+        "iso_date_strings"
+      ],
+      "passed": true,
+      "reason": null,
+      "steps": 8,
+      "tool_path": [
+        "list_tables",
+        "describe_table",
+        "run_sql",
+        "finish"
+      ],
+      "recoveries": 0,
+      "latency_ms": 25214,
+      "cost_usd": 0.001438,
+      "stopped_reason": "finished",
+      "agent_sql": "SELECT channel, COUNT(*) AS order_count FROM orders WHERE ordered_at BETWEEN '2026-01-01' AND '2026-03-31' GROUP BY channel",
+      "expected_rows": 3
+    },
+    {
+      "id": "customers_without_orders",
+      "question": "How many customers have never placed an order?",
+      "traps": [
+        "anti_join"
+      ],
+      "passed": true,
+      "reason": null,
+      "steps": 9,
+      "tool_path": [
+        "list_tables",
+        "describe_table",
+        "describe_table",
+        "run_sql",
+        "finish"
+      ],
+      "recoveries": 0,
+      "latency_ms": 15808,
+      "cost_usd": 0.001529,
+      "stopped_reason": "finished",
+      "agent_sql": "SELECT COUNT(*) AS customers_without_orders FROM customers WHERE id NOT IN (SELECT customer_id FROM orders)",
+      "expected_rows": 1
+    },
+    {
+      "id": "refund_rate",
+      "question": "What percentage of non-cancelled orders ended up with a refund?",
+      "traps": [
+        "cancelled_orders",
+        "ratio"
+      ],
+      "passed": true,
+      "reason": null,
+      "steps": 9,
+      "tool_path": [
+        "list_tables",
+        "describe_table",
+        "describe_table",
+        "run_sql",
+        "finish"
+      ],
+      "recoveries": 0,
+      "latency_ms": 56587,
+      "cost_usd": 0.00186,
+      "stopped_reason": "finished",
+      "agent_sql": "WITH non_cancelled_orders AS (SELECT id FROM orders WHERE status != 'cancelled'), refunded_orders AS (SELECT DISTINCT order_id FROM refunds) SELECT (COUNT(refunded_orders.order_id) * 100.0 / COUNT(non_cancelled_orders.id)) AS refund_percentage FROM non_cancelled_orders LEFT JOIN refunded_orders ON non_cancelled_orders.id = refunded_orders.order_id;",
+      "expected_rows": 1
+    }
+  ]
+}
