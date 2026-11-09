@@ -96,10 +96,26 @@ def build_graph(llm: LLM, tools: Tools, max_steps: int):
             name = call["function"]["name"]
             raw = call["function"].get("arguments") or "{}"
             try:
-                arguments = json.loads(raw) if isinstance(raw, str) else dict(raw)
+                arguments = json.loads(raw) if isinstance(raw, str) else raw
             except json.JSONDecodeError as exc:
                 result = {"ok": False, "error": f"arguments were not valid JSON: {exc}"}
-                trace.add_tool(name, {"raw": raw[:200]}, result, 0)
+                trace.add_tool(name, {"raw": str(raw)[:200]}, result, 0)
+                messages.append(_tool_result_message(call["id"], name, result))
+                continue
+
+            # Smaller models sometimes send a JSON array, or a bare string,
+            # where the schema asks for an object. That is a malformed call,
+            # not a crash: tell the model what shape it owes us and let it
+            # try again.
+            if not isinstance(arguments, dict):
+                result = {
+                    "ok": False,
+                    "error": (
+                        f"arguments must be a JSON object, got "
+                        f"{type(arguments).__name__}. Expected keys for {name}."
+                    ),
+                }
+                trace.add_tool(name, {"raw": str(raw)[:200]}, result, 0)
                 messages.append(_tool_result_message(call["id"], name, result))
                 continue
 
@@ -110,7 +126,12 @@ def build_graph(llm: LLM, tools: Tools, max_steps: int):
 
             if name == "finish" and result.get("ok"):
                 trace.answer = result.get("answer")
-                trace.final_sql = result.get("sql") or _last_successful_sql(trace)
+                # Prefer SQL we actually executed over SQL the model typed into
+                # `finish`. Asked how many orders there were, the agent read the
+                # count off `list_tables` and then reported a SELECT it had
+                # never run — a right answer with fabricated evidence.
+                trace.claimed_sql = result.get("sql") or None
+                trace.final_sql = _last_successful_sql(trace)
                 trace.stopped_reason = "finished"
                 done = True
 

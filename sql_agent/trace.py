@@ -47,7 +47,8 @@ class Trace:
     started_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     steps: list[Step] = field(default_factory=list)
     answer: str | None = None
-    final_sql: str | None = None
+    final_sql: str | None = None          # SQL that was actually executed
+    claimed_sql: str | None = None        # SQL the model typed into `finish`
     stopped_reason: str | None = None     # "finished" | "max_steps" | "error"
 
     # -- recording -------------------------------------------------------
@@ -114,6 +115,8 @@ class Trace:
             "question": self.question,
             "answer": self.answer,
             "final_sql": self.final_sql,
+            "claimed_sql": self.claimed_sql,
+            "sql_was_executed": bool(self.final_sql),
             "stopped_reason": self.stopped_reason,
             "totals": {
                 "steps": len(self.steps),
