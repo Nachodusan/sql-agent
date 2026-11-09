@@ -15,6 +15,7 @@
   reference_sql: "SELECT count(*) AS n FROM orders"
 
 - id: top_customers_net
+  ordered: true
   question: >
     Who are the top 5 customers by how much they actually spent?
     Exclude cancelled orders and subtract any refunds.
@@ -59,6 +60,7 @@
     )
 
 - id: price_drift
+  ordered: true
   question: >
     Which products were sold for less than their current list price,
     and what is the largest gap?
@@ -91,7 +93,7 @@
     WHERE NOT EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.id)
 
 - id: refund_rate
-  question: "What share of non-cancelled orders ended up with a refund?"
+  question: "What percentage of non-cancelled orders ended up with a refund?"
   traps: [cancelled_orders, ratio]
   reference_sql: |
     SELECT ROUND(

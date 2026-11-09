@@ -47,6 +47,43 @@ def normalise(rows: list[sqlite3.Row]) -> list[tuple]:
     return out
 
 
+def _contains_in_order(haystack: tuple, needle: tuple) -> bool:
+    """Is `needle` a subsequence of `haystack`?
+
+    The agent is free to select more columns than the reference does. Asking
+    for `name, spend` and getting back `id, name, gross, refunds, spend` is a
+    cosmetic difference, not a wrong answer.
+    """
+    it = iter(haystack)
+    return all(any(value == h for h in it) for value in needle)
+
+
+def matches(expected: list[tuple], actual: list[tuple], *, ordered: bool) -> bool:
+    """Does the agent's result carry the reference's answer?
+
+    Two rules that cost a round of false failures to learn:
+
+    * **Row order is only compared when the question asked for an order.**
+      "Revenue per category" has no canonical order, so grading on it measures
+      nothing. "Top 5 customers" does, so there it is part of the answer.
+    * **Extra columns are allowed.** Only the reference's values have to be
+      present, in order, within each row.
+    """
+    if len(expected) != len(actual):
+        return False
+    if ordered:
+        return all(_contains_in_order(a, e) for e, a in zip(expected, actual))
+    remaining = list(actual)
+    for row in expected:
+        for i, candidate in enumerate(remaining):
+            if _contains_in_order(candidate, row):
+                remaining.pop(i)
+                break
+        else:
+            return False
+    return True
+
+
 def run_query(db_path: Path, query: str) -> tuple[list[tuple] | None, str | None]:
     try:
         conn = db.connect(db_path)
@@ -89,7 +126,8 @@ def main(argv: list[str] | None = None) -> int:
         if trace.final_sql:
             actual, agent_err = run_query(db_path, trace.final_sql)
 
-        passed = actual is not None and actual == expected
+        ordered = bool(case.get("ordered", False))
+        passed = actual is not None and matches(expected, actual, ordered=ordered)
         reason = None if passed else (agent_err or "result mismatch")
 
         mark = "✓" if passed else "✗"
