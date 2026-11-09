@@ -1,0 +1,102 @@
+# Golden set.
+#
+# Each case carries a reference SQL query written by hand against the real
+# schema. Scoring does NOT compare the agent's prose, and does not compare its
+# SQL text either — two correct queries rarely look alike. It runs the agent's
+# final SQL and the reference query against the same database and compares the
+# *result sets*.
+#
+# `traps` names what the case is actually testing. A case with no trap is there
+# to check the agent doesn't over-think the easy ones.
+
+- id: count_orders
+  question: "How many orders are in the database?"
+  traps: []
+  reference_sql: "SELECT count(*) AS n FROM orders"
+
+- id: top_customers_net
+  question: >
+    Who are the top 5 customers by how much they actually spent?
+    Exclude cancelled orders and subtract any refunds.
+  traps: [no_total_column, cents, cancelled_orders, refunds]
+  reference_sql: |
+    SELECT c.name,
+           (SUM(oi.quantity * oi.unit_price_cents)
+            - COALESCE((SELECT SUM(r.amount_cents)
+                        FROM refunds r
+                        JOIN orders o2 ON o2.id = r.order_id
+                        WHERE o2.customer_id = c.id), 0)) / 100.0 AS spend
+    FROM customers c
+    JOIN orders o ON o.customer_id = c.id AND o.status != 'cancelled'
+    JOIN order_items oi ON oi.order_id = o.id
+    GROUP BY c.id
+    ORDER BY spend DESC
+    LIMIT 5
+
+- id: revenue_by_category
+  question: "What is the total revenue per product category, excluding cancelled orders?"
+  traps: [no_total_column, cents, cancelled_orders, join_through_items]
+  reference_sql: |
+    SELECT p.category,
+           SUM(oi.quantity * oi.unit_price_cents) / 100.0 AS revenue
+    FROM products p
+    JOIN order_items oi ON oi.product_id = p.id
+    JOIN orders o ON o.id = oi.order_id AND o.status != 'cancelled'
+    GROUP BY p.category
+    ORDER BY revenue DESC
+
+- id: avg_order_value
+  question: "What is the average order value for completed orders?"
+  traps: [no_total_column, cents, status_filter]
+  reference_sql: |
+    SELECT AVG(order_total) / 100.0 AS avg_order_value
+    FROM (
+      SELECT o.id, SUM(oi.quantity * oi.unit_price_cents) AS order_total
+      FROM orders o
+      JOIN order_items oi ON oi.order_id = o.id
+      WHERE o.status = 'completed'
+      GROUP BY o.id
+    )
+
+- id: price_drift
+  question: >
+    Which products were sold for less than their current list price,
+    and what is the largest gap?
+  traps: [historic_vs_list_price]
+  reference_sql: |
+    SELECT p.name,
+           MAX(p.list_price_cents - oi.unit_price_cents) / 100.0 AS max_gap
+    FROM products p
+    JOIN order_items oi ON oi.product_id = p.id
+    WHERE oi.unit_price_cents < p.list_price_cents
+    GROUP BY p.id
+    ORDER BY max_gap DESC
+
+- id: orders_by_channel_q1
+  question: "How many orders came through each channel in the first quarter of 2026?"
+  traps: [iso_date_strings]
+  reference_sql: |
+    SELECT channel, count(*) AS n
+    FROM orders
+    WHERE ordered_at >= '2026-01-01' AND ordered_at < '2026-04-01'
+    GROUP BY channel
+    ORDER BY n DESC
+
+- id: customers_without_orders
+  question: "How many customers have never placed an order?"
+  traps: [anti_join]
+  reference_sql: |
+    SELECT count(*) AS n
+    FROM customers c
+    WHERE NOT EXISTS (SELECT 1 FROM orders o WHERE o.customer_id = c.id)
+
+- id: refund_rate
+  question: "What share of non-cancelled orders ended up with a refund?"
+  traps: [cancelled_orders, ratio]
+  reference_sql: |
+    SELECT ROUND(
+      100.0 * COUNT(DISTINCT r.order_id) / COUNT(DISTINCT o.id), 2
+    ) AS pct
+    FROM orders o
+    LEFT JOIN refunds r ON r.order_id = o.id
+    WHERE o.status != 'cancelled'
