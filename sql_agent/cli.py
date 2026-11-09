@@ -37,7 +37,12 @@ def main(argv: list[str] | None = None) -> int:
 
     from sql_agent.agent import ask  # imported late so --build-db needs no API key
 
-    trace = ask(question, db_path=args.db_path, model=args.model, max_steps=args.max_steps)
+    try:
+        trace = ask(question, db_path=args.db_path, model=args.model, max_steps=args.max_steps)
+    except RuntimeError as exc:
+        # Missing configuration is a user error, not a crash. No traceback.
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
 
     if args.json:
         import json

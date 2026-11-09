@@ -112,7 +112,7 @@ Requires Python ≥ 3.11 and any OpenAI-compatible endpoint.
 ```bash
 git clone https://github.com/Nachodusan/sql-agent
 cd sql-agent
-uv venv && uv pip install -e ".[dev]"      # or: pip install -e ".[dev]"
+uv venv && uv pip install ".[dev]"        # or: pip install ".[dev]"
 
 cp .env.example .env                        # add your key
 python -m sql_agent.cli --build-db          # generate the sample database
