@@ -1,5 +1,7 @@
 # sql-agent
 
+[![tests](https://github.com/Nachodusan/sql-agent/actions/workflows/tests.yml/badge.svg)](https://github.com/Nachodusan/sql-agent/actions/workflows/tests.yml)
+
 A natural-language SQL agent with an instrumented loop, and an evaluation
 harness built to catch the answers that **look** right.
 
